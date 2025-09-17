@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizador de Dados Financeiros</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js" charset="utf-8"></script>
+    <link rel="stylesheet" href="estilos.css">
+</head>
+<body class="bg-gray-100 font-sans flex flex-col min-h-screen">
+
+    <!-- Mensagem de feedback flutuante -->
+    <div id="message-box" class="fixed top-4 left-1/2 -translate-x-1/2 p-4 rounded-lg text-sm z-50 transition-all duration-300 transform scale-0 opacity-0" style="display: none;"></div>
+
+    <header class="bg-white shadow-md p-4">
+        <h1 class="text-2xl font-bold text-gray-800 text-center">Visualizador de Dados Financeiros</h1>
+    </header>
+
+    <main class="flex-grow flex flex-col lg:flex-row p-4 gap-4">
+
+        <!-- Painel de Controlo -->
+        <div class="bg-white p-6 rounded-lg shadow-md w-full lg:w-1/3 flex flex-col space-y-4">
+            <h2 class="text-xl font-bold mb-2">Opções do Gráfico</h2>
+
+            <!-- Carregar Arquivo -->
+            <div>
+                <label for="arquivoInput" class="block text-sm font-medium text-gray-700">1. Carregar Arquivo JSON</label>
+                <input type="file" id="arquivoInput" accept=".json" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+            </div>
+            
+            <!-- Limpar Cache -->
+            <div>
+                 <button id="limparCacheBtn" class="w-full btn-secundary">Limpar Dados Temporários</button>
+            </div>
+
+            <!-- Seleção de Datas -->
+            <div>
+                <label for="dataInicio" class="block text-sm font-medium text-gray-700">2. Selecionar Período</label>
+                <div class="flex gap-2 mt-1">
+                    <input type="date" id="dataInicio" class="flex-1 p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    <input type="date" id="dataFim" class="flex-1 p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+            </div>
+
+            <!-- Seleção de Elementos -->
+            <div>
+                <label for="elementoSelecionado" class="block text-sm font-medium text-gray-700">3. Selecionar Elementos (use CTRL/CMD)</label>
+                <select id="elementoSelecionado" multiple class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 h-32"></select>
+            </div>
+
+            <!-- Modalidade do Gráfico -->
+            <div>
+                <label for="modalidadeGrafico" class="block text-sm font-medium text-gray-700">4. Selecionar Modalidade do Gráfico</label>
+                <select id="modalidadeGrafico" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    <option value="percentual">Variação Percentual (%)</option>
+                    <option value="diferencaReais">Diferença em Reais (R$)</option>
+                </select>
+            </div>
+
+            <!-- Botões -->
+            <div class="flex gap-2">
+                <button id="gerarGraficoBtn" class="w-full btn-primary">Gerar Gráfico</button>
+                <button id="salvarArquivoBtn" class="w-full btn-secundary" disabled>Salvar Arquivo</button>
+            </div>
+
+        </div>
+
+        <!-- Área do Gráfico -->
+        <div class="bg-white p-4 rounded-lg shadow-md flex-grow lg:w-2/3 flex items-center justify-center">
+            <div id="areaGrafico" class="w-full h-full min-h-[400px]">
+                <p class="text-gray-400 text-center">O seu gráfico será exibido aqui.</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal de Salvar Arquivo -->
+    <div id="saveModal" class="fixed inset-0 bg-black bg-opacity-50 z-[100] flex items-center justify-center hidden">
+        <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm">
+            <h3 class="text-lg font-bold mb-4">Salvar Arquivo</h3>
+            <p class="text-sm text-gray-600 mb-4">Insira o nome do arquivo que deseja salvar:</p>
+            <input type="text" id="saveFileNameInput" class="w-full p-2 mb-4 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+            <div class="flex gap-2 justify-end">
+                <button id="cancelSaveBtn" class="btn-secundary">Cancelar</button>
+                <button id="confirmSaveBtn" class="btn-primary">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
