@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizador de Dados Financeiros</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js" charset="utf-8"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .btn-primary {
+            @apply bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-all duration-300 ease-in-out;
+        }
+        .btn-primary:hover {
+            @apply bg-blue-700 scale-105;
+        }
+        .btn-secundary {
+            @apply bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg shadow-md transition-all duration-300 ease-in-out;
+        }
+        .btn-secundary:hover {
+            @apply bg-gray-300 scale-105;
+        }
+        .message-box {
+            animation: fadeInOut 2s forwards;
+            transform-origin: center center;
+        }
+        .message-box.success {
+            @apply bg-green-500 text-white;
+        }
+        .message-box.error {
+            @apply bg-red-500 text-white;
+        }
+        @keyframes fadeInOut {
+            0% { transform: scale(0.5); opacity: 0; }
+            10% { transform: scale(1); opacity: 1; }
+            90% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(0.5); opacity: 0; }
+        }
+        
+        /* Estilos específicos para o gráfico */
+        #areaGrafico {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans flex flex-col min-h-screen">
+
+    <!-- Mensagem de feedback flutuante -->
+    <div id="message-box" class="fixed top-4 left-1/2 -translate-x-1/2 p-4 rounded-lg text-sm z-50 transition-all duration-300 transform scale-0 opacity-0" style="display: none;"></div>
+
+    <header class="bg-white shadow-md p-4">
+        <h1 class="text-2xl font-bold text-gray-800 text-center">Visualizador de Dados Financeiros</h1>
+    </header>
+
+    <main class="flex flex-col lg:flex-row flex-grow p-4 gap-4">
+
+        <!-- Painel de Controle -->
+        <div class="bg-white p-4 rounded-lg shadow-md lg:w-1/3 flex flex-col gap-4">
+            <h2 class="text-xl font-semibold mb-2 text-gray-700">Controles</h2>
+            
+            <!-- Entrada de Arquivo -->
+            <div>
+                <label for="arquivoInput" class="block text-gray-600 font-medium mb-1">Carregar Arquivo JSON:</label>
+                <input type="file" id="arquivoInput" accept=".json" class="w-full text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
+                <p id="fileStatusMessage" class="mt-2 text-sm text-gray-400">Nenhum arquivo escolhido.</p>
+            </div>
+            
+            <!-- Seleção de Elemento -->
+            <div>
+                <label for="elementoSelecionado" class="block text-gray-600 font-medium mb-1">Selecionar Elemento:</label>
+                <select multiple id="elementoSelecionado" class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 h-24 text-sm text-gray-800 bg-white">
+                    <option disabled>Carregue um arquivo primeiro</option>
+                </select>
+            </div>
+
+            <!-- Seleção de Datas -->
+            <div>
+                <label class="block text-gray-600 font-medium mb-1">Período:</label>
+                <div class="flex gap-2">
+                    <input type="date" id="dataInicio" class="w-1/2 p-2 border border-gray-300 rounded-lg text-sm text-gray-800">
+                    <input type="date" id="dataFim" class="w-1/2 p-2 border border-gray-300 rounded-lg text-sm text-gray-800">
+                </div>
+            </div>
+
+            <!-- Modalidade do Gráfico -->
+            <div>
+                <label for="modalidadeGrafico" class="block text-gray-600 font-medium mb-1">Modalidade do Gráfico:</label>
+                <select id="modalidadeGrafico" class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-800 bg-white">
+                    <option value="percentual">Variação Percentual (%)</option>
+                    <option value="diferencaReais">Diferença em Reais (R$)</option>
+                </select>
+            </div>
+            
+            <!-- Botões de Ação -->
+            <div class="flex flex-col sm:flex-row gap-2">
+                <button id="gerarGraficoBtn" class="w-full btn-primary">Gerar Gráfico</button>
+                <button id="limparCacheBtn" class="w-full btn-secundary">Limpar Cache</button>
+                <button id="salvarArquivoBtn" class="w-full btn-secundary" disabled>Salvar Arquivo</button>
+            </div>
+        </div>
+
+        <!-- Área do Gráfico -->
+        <div class="bg-white p-4 rounded-lg shadow-md flex-grow lg:w-2/3 flex items-center justify-center">
+            <div id="areaGrafico">
+                <p class="text-gray-400 text-center">O seu gráfico será exibido aqui.</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal de Salvar Arquivo -->
+    <div id="saveModal" class="fixed inset-0 bg-black bg-opacity-50 z-[100] flex items-center justify-center hidden">
+        <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm">
+            <h3 class="text-lg font-bold mb-4">Salvar Arquivo</h3>
+            <p class="text-sm text-gray-600 mb-4">Insira o nome do arquivo que deseja salvar:</p>
+            <input type="text" id="saveFileNameInput" class="w-full p-2 mb-4 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+            <div class="flex justify-end gap-2">
+                <button id="cancelSaveBtn" class="btn-secundary">Cancelar</button>
+                <button id="confirmSaveBtn" class="btn-primary">Salvar</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const arquivoInput = document.getElementById('arquivoInput');
+            const dataInicioInput = document.getElementById('dataInicio');
+            const dataFimInput = document.getElementById('dataFim');
+            const elementoSelecionadoSelect = document.getElementById('elementoSelecionado'); 
+            const modalidadeGraficoSelect = document.getElementById('modalidadeGrafico');
+            const gerarGraficoBtn = document.getElementById('gerarGraficoBtn');
+            const areaGrafico = document.getElementById('areaGrafico');
+            const messageBox = document.getElementById('message-box');
+            const limparCacheBtn = document.getElementById('limparCacheBtn');
+            const salvarArquivoBtn = document.getElementById('salvarArquivoBtn');
+            const fileStatusMessage = document.getElementById('fileStatusMessage');
+            
+            // Elementos do novo modal
+            const saveModal = document.getElementById('saveModal');
+            const saveFileNameInput = document.getElementById('saveFileNameInput');
+            const confirmSaveBtn = document.getElementById('confirmSaveBtn');
+            const cancelSaveBtn = document.getElementById('cancelSaveBtn');
+
+            let dadosFinanceiros = []; 
+            let currentFileName = null;
+            let currentLayout = {};
+            let currentTraces = [];
+
+            // Função para exibir mensagens temporárias para o usuário
+            function showMessage(message, type = 'success') {
+                messageBox.textContent = message;
+                messageBox.className = `message-box ${type}`;
+                messageBox.style.display = 'block';
+                setTimeout(() => {
+                    messageBox.style.display = 'none';
+                }, 2000);
+            }
+
+            // Função auxiliar para converter a data do formato 'dd/mm/yyyy' para 'yyyy-mm-dd'
+            function converterData(dataStr) {
+                if (!dataStr) return '';
+                const partes = dataStr.split('/');
+                if (partes.length === 3) {
+                    return `${partes[2]}-${partes[1]}-${partes[0]}`;
+                }
+                return dataStr;
+            }
+
+            function processarDados(dados, nomeArquivo) {
+                dadosFinanceiros = dados;
+                dadosFinanceiros.sort((a, b) => new Date(converterData(a.Data)) - new Date(converterData(b.Data)));
+                
+                dadosFinanceiros.forEach(item => {
+                    const xpValor = Number(item.XP) || 0;
+                    const rendaFixaValor = Number(item['Renda Fixa']) || 0;
+                    item['Renda Variável'] = xpValor - rendaFixaValor;
+                });
+
+                if (dadosFinanceiros.length > 0) {
+                    const chavesNumericasIdentificadas = new Set(); 
+                    
+                    dadosFinanceiros.forEach(item => {
+                         for (const key in item) {
+                            const valorConvertido = Number(item[key]);
+                            if (!isNaN(valorConvertido) && key !== 'Data' && key !== 'Comentario' && key !== 'OutrasDesc') {
+                                chavesNumericasIdentificadas.add(key); 
+                            }
+                         }
+                    });
+
+                    elementoSelecionadoSelect.innerHTML = ''; 
+                    chavesNumericasIdentificadas.forEach(key => {
+                        const option = document.createElement('option');
+                        option.value = key;
+                        option.textContent = key;
+                        elementoSelecionadoSelect.appendChild(option);
+                    });
+
+                    if (elementoSelecionadoSelect.options.length > 0) {
+                        fileStatusMessage.textContent = `Arquivo "${nomeArquivo}" carregado com sucesso!`;
+                        salvarArquivoBtn.disabled = false;
+                        return true;
+                    } else {
+                        fileStatusMessage.textContent = 'Erro: nenhum elemento numérico encontrado.';
+                        salvarArquivoBtn.disabled = true;
+                        return false;
+                    }
+                } else {
+                    fileStatusMessage.textContent = 'Erro: o arquivo JSON está vazio.';
+                    salvarArquivoBtn.disabled = true;
+                    return false;
+                }
+            }
+
+            function carregarDadosIniciais() {
+                const dadosArmazenados = localStorage.getItem('dadosFinanceiros');
+                const nomeArquivoSalvo = localStorage.getItem('nomeArquivo');
+                if (dadosArmazenados) {
+                    try {
+                        processarDados(JSON.parse(dadosArmazenados), nomeArquivoSalvo || 'dados-salvos');
+                        currentFileName = nomeArquivoSalvo || 'dados-financeiros-modificado.json';
+                        fileStatusMessage.textContent = 'Dados da sessão anterior carregados com sucesso!';
+                        showMessage(`Dados da sessão anterior carregados com sucesso!`, 'success');
+                    } catch (e) {
+                        console.error('Erro ao carregar dados do LocalStorage:', e);
+                        localStorage.removeItem('dadosFinanceiros');
+                        localStorage.removeItem('nomeArquivo');
+                        fileStatusMessage.textContent = 'Erro ao carregar os dados salvos.';
+                        showMessage('Dados armazenados localmente estão corrompidos. Por favor, carregue um novo arquivo.', 'error');
+                    }
+                } else {
+                     fileStatusMessage.textContent = 'Nenhum arquivo escolhido.';
+                }
+            }
+            
+            function downloadFile(filename) {
+                if (dadosFinanceiros.length > 0) {
+                    const jsonString = JSON.stringify(dadosFinanceiros, null, 2);
+                    const blob = new Blob([jsonString], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename || 'dados-financeiros-modificado.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    showMessage(`Arquivo salvo com sucesso como "${a.download}"!`, 'success');
+                } else {
+                    showMessage('Nenhum dado para salvar.', 'error');
+                }
+            }
+
+            function setDefaultDates() {
+                const today = new Date();
+                const oneMonthAgo = new Date();
+                oneMonthAgo.setMonth(today.getMonth() - 1);
+
+                const formatDate = (date) => {
+                    const year = date.getFullYear();
+                    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                    const day = date.getDate().toString().padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                };
+
+                dataFimInput.value = formatDate(today);
+                dataInicioInput.value = formatDate(oneMonthAgo);
+            }
+
+            // Função para gerar ou atualizar o gráfico
+            function generateOrUpdateGraph() {
+                if (dadosFinanceiros.length === 0) {
+                    showMessage('Por favor, carregue um arquivo JSON primeiro.', 'error');
+                    return;
+                }
+
+                const dataInicio = dataInicioInput.value;
+                const dataFim = dataFimInput.value;
+                const modalidade = modalidadeGraficoSelect.value;
+                
+                let elementosSelecionados = Array.from(elementoSelecionadoSelect.options)
+                                               .filter(option => option.selected)
+                                               .map(option => option.value);
+
+                if (modalidade === 'diferencaReais') {
+                    elementosSelecionados = elementosSelecionados.filter(el => el !== 'IBOV');
+                    if (elementosSelecionados.length === 0) {
+                        showMessage('Para a modalidade "Diferença em Reais", selecione pelo menos um investimento além do IBOV.', 'error');
+                        return;
+                    }
+                }
+
+                if (!dataInicio || !dataFim || elementosSelecionados.length === 0) {
+                    showMessage('Por favor, preencha todos os campos: data de início, data final e selecione pelo menos um elemento.', 'error');
+                    return;
+                }
+
+                let dadosPorData = dadosFinanceiros.filter(item => {
+                    const dataItemConvertida = converterData(item.Data);
+                    return dataItemConvertida >= dataInicio && dataItemConvertida <= dataFim;
+                });
+
+                if (dadosPorData.length === 0) {
+                    showMessage('Nenhum dado encontrado para o período selecionado.', 'error');
+                    areaGrafico.innerHTML = '<p style="text-align:center;">Nenhum dado válido para o período selecionado.</p>';
+                    return;
+                }
+
+                const traces = [];
+                let yAxisTitle = '';
+                let graphTitlePrefix = '';
+                let tickFormatY = '';
+                const colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+
+                if (modalidade === 'percentual') {
+                    yAxisTitle = 'Variação Percentual (%)';
+                    graphTitlePrefix = 'Variação Percentual';
+                    tickFormatY = ',.1f';
+                } else {
+                    yAxisTitle = 'Diferença em Reais (R$)';
+                    graphTitlePrefix = 'Diferença em Reais';
+                    tickFormatY = '$,.2f';
+                }
+
+                elementosSelecionados.forEach((elemento, index) => {
+                    const dadosFiltradosParaElemento = dadosPorData.filter(item => {
+                        const valor = Number(item[elemento]);
+                        return !isNaN(valor) && valor !== 0;
+                    });
+
+                    if (dadosFiltradosParaElemento.length === 0) {
+                        console.warn(`Nenhum dado válido para o elemento "${elemento}" no período selecionado (valores ausentes ou zero).`);
+                        return; 
+                    }
+                    
+                    const lineColor = colors[index % colors.length];
+
+                    const valorInicial = Number(dadosFiltradosParaElemento[0][elemento]);
+
+                    if (valorInicial === 0 && modalidade === 'percentual') {
+                        console.warn(`O valor inicial para "${elemento}" é zero, impossível calcular variação percentual.`);
+                        return; 
+                    }
+                    
+                    const x = dadosFiltradosParaElemento.map(item => item.Data);
+                    let y;
+                    if (modalidade === 'percentual') {
+                         y = dadosFiltradosParaElemento.map(item => ((Number(item[elemento]) / valorInicial) - 1) * 100);
+                    } else {
+                        y = dadosFiltradosParaElemento.map(item => Number(item[elemento]) - valorInicial);
+                    }
+                    
+                    const comentarios = dadosFiltradosParaElemento.map(item => item.Comentario);
+
+                    traces.push({
+                        x: x,
+                        y: y,
+                        mode: 'lines+markers',
+                        type: 'scatter',
+                        name: elemento,
+                        customdata: comentarios,
+                        hovertemplate: '<b>Data</b>: %{x}<br><b>Valor</b>: %{y}<br>%{customdata}<extra></extra>'
+                    });
+                });
+
+                if (traces.length === 0) {
+                    showMessage('Nenhum dado válido para os elementos selecionados. Não foi possível gerar o gráfico.', 'error');
+                    areaGrafico.innerHTML = '<p style="text-align:center;">Nenhum dado válido para o período ou elementos selecionados.</p>';
+                    return;
+                }
+                
+                currentTraces = traces;
+
+                const layout = {
+                    title: `${graphTitlePrefix} de ${elementosSelecionados.join(', ')} de ${dataInicio} a ${dataFim}`,
+                    xaxis: {
+                        title: 'Data',
+                        tickangle: 45 
+                    },
+                    yaxis: {
+                        title: yAxisTitle,
+                        tickformat: tickFormatY 
+                    },
+                    hovermode: 'closest',
+                    hoverlabel: {
+                        bgcolor: '#2d3748',
+                        font: {
+                            color: '#FFD700' 
+                        }
+                    },
+                    legend: {
+                        orientation: 'h', 
+                        yanchor: 'bottom',
+                        y: 1.02,
+                        xanchor: 'right',
+                        x: 1
+                    },
+                    autosize: true
+                };
+
+                currentLayout = layout;
+                Plotly.newPlot(areaGrafico, currentTraces, currentLayout);
+                showMessage('Gráfico gerado com sucesso!', 'success');
+            }
+
+            // Evento para carregar o arquivo
+            arquivoInput.addEventListener('change', (event) => {
+                const arquivo = event.target.files[0];
+                if (arquivo) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const dados = JSON.parse(e.target.result);
+                            const processamentoOk = processarDados(dados, arquivo.name);
+                            if (processamentoOk) {
+                                localStorage.setItem('dadosFinanceiros', JSON.stringify(dados));
+                                localStorage.setItem('nomeArquivo', arquivo.name);
+                                currentFileName = arquivo.name;
+                                showMessage(`Arquivo "${arquivo.name}" carregado com sucesso! Agora, selecione os elementos e as datas.`, 'success');
+                            } else {
+                                showMessage('Nenhum elemento numérico encontrado para plotar no arquivo.', 'error');
+                            }
+                        } catch (error) {
+                            showMessage('Erro ao ler o arquivo. Certifique-se de que é um arquivo JSON válido.', 'error');
+                            console.error('Erro de leitura/parsing:', error);
+                        }
+                    };
+                    reader.readAsText(arquivo);
+                } else {
+                     fileStatusMessage.textContent = 'Nenhum arquivo escolhido.';
+                }
+            });
+
+            limparCacheBtn.addEventListener('click', () => {
+                localStorage.removeItem('dadosFinanceiros');
+                localStorage.removeItem('nomeArquivo');
+                currentFileName = null;
+                window.location.reload();
+            });
+
+            salvarArquivoBtn.addEventListener('click', () => {
+                if (dadosFinanceiros.length > 0) {
+                    saveFileNameInput.value = currentFileName || 'dados-financeiros-modificado.json';
+                    saveModal.classList.remove('hidden');
+                } else {
+                    showMessage('Nenhum dado para salvar.', 'error');
+                }
+            });
+
+            confirmSaveBtn.addEventListener('click', () => {
+                const filename = saveFileNameInput.value;
+                if (filename.trim() === '') {
+                    showMessage('O nome do arquivo não pode ser vazio.', 'error');
+                    return;
+                }
+                downloadFile(filename);
+                saveModal.classList.add('hidden');
+            });
+
+            cancelSaveBtn.addEventListener('click', () => {
+                saveModal.classList.add('hidden');
+            });
+
+            saveModal.addEventListener('click', (event) => {
+                if (event.target === saveModal) {
+                    saveModal.classList.add('hidden');
+                }
+            });
+
+            gerarGraficoBtn.addEventListener('click', generateOrUpdateGraph);
+
+            // Adiciona o listener para redimensionamento da janela
+            window.addEventListener('resize', () => {
+                if (currentTraces.length > 0) {
+                    Plotly.relayout(areaGrafico, currentLayout);
+                }
+            });
+
+            carregarDadosIniciais();
+            setDefaultDates();
+        });
+    </script>
+</body>
+</html>
