@@ -96,6 +96,7 @@
             <div>
                 <label for="modalidadeGrafico" class="block text-gray-600 font-medium mb-1">Modalidade do Gráfico:</label>
                 <select id="modalidadeGrafico" class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-800 bg-white">
+                    <option value="absoluto">Valor Absoluto (R$)</option>
                     <option value="percentual">Variação Percentual (%)</option>
                     <option value="diferencaReais">Diferença em Reais (R$)</option>
                 </select>
@@ -162,7 +163,7 @@
                 messageBox.style.display = 'block';
                 setTimeout(() => {
                     messageBox.style.display = 'none';
-                }, 2000);
+                }, 2000); // Usando 2 segundos (2000ms)
             }
 
             // Função auxiliar para converter a data do formato 'dd/mm/yyyy' para 'yyyy-mm-dd'
@@ -182,7 +183,16 @@
                 dadosFinanceiros.forEach(item => {
                     const xpValor = Number(item.XP) || 0;
                     const rendaFixaValor = Number(item['Renda Fixa']) || 0;
+                    
+                    // Campos para o cálculo TOTAL
+                    const ricoModalClearValor = Number(item['Rico-Modal-Clear']) || 0;
+                    const outrasValor = Number(item.Outras) || 0; 
+
+                    // Campo Renda Variável (cálculo existente)
                     item['Renda Variável'] = xpValor - rendaFixaValor;
+                    
+                    // CÁLCULO: TOTAL (XP + Rico-Modal-Clear + Outras)
+                    item.TOTAL = xpValor + ricoModalClearValor + outrasValor;
                 });
 
                 if (dadosFinanceiros.length > 0) {
@@ -191,6 +201,7 @@
                     dadosFinanceiros.forEach(item => {
                          for (const key in item) {
                             const valorConvertido = Number(item[key]);
+                            // Adiciona chaves numéricas válidas ao Set
                             if (!isNaN(valorConvertido) && key !== 'Data' && key !== 'Comentario' && key !== 'OutrasDesc') {
                                 chavesNumericasIdentificadas.add(key); 
                             }
@@ -198,7 +209,24 @@
                     });
 
                     elementoSelecionadoSelect.innerHTML = ''; 
-                    chavesNumericasIdentificadas.forEach(key => {
+
+                    // 1. CRIA E ADICIONA A OPÇÃO 'TOTAL' EM PRIMEIRO LUGAR
+                    const totalOption = document.createElement('option');
+                    totalOption.value = 'TOTAL';
+                    totalOption.textContent = 'TOTAL';
+                    // Adiciona o atributo 'selected' para já vir selecionado
+                    totalOption.selected = true; 
+                    elementoSelecionadoSelect.appendChild(totalOption);
+                    
+                    // Remove 'TOTAL' do Set para não duplicar, caso tenha sido adicionado
+                    chavesNumericasIdentificadas.delete('TOTAL');
+
+
+                    // 2. ADICIONA AS OUTRAS CHAVES NUMÉRICAS
+                    // Converte o Set para Array e ordena as chaves restantes (opcional: ordenar alfabeticamente)
+                    const outrasChaves = Array.from(chavesNumericasIdentificadas).sort();
+
+                    outrasChaves.forEach(key => {
                         const option = document.createElement('option');
                         option.value = key;
                         option.textContent = key;
@@ -291,14 +319,16 @@
                                                .filter(option => option.selected)
                                                .map(option => option.value);
 
+                // No modo 'Diferença em Reais', o IBOV não pode ser plotado.
                 if (modalidade === 'diferencaReais') {
                     elementosSelecionados = elementosSelecionados.filter(el => el !== 'IBOV');
                     if (elementosSelecionados.length === 0) {
-                        showMessage('Para a modalidade "Diferença em Reais", selecione pelo menos um investimento além do IBOV.', 'error');
+                        showMessage('Para a modalidade "Diferença em Reais", selecione pelo menos um investimento (exceto IBOV).', 'error');
                         return;
                     }
                 }
-
+                
+                // No modo 'Valor Absoluto' e 'Variação Percentual', podemos plotar o IBOV
                 if (!dataInicio || !dataFim || elementosSelecionados.length === 0) {
                     showMessage('Por favor, preencha todos os campos: data de início, data final e selecione pelo menos um elemento.', 'error');
                     return;
@@ -321,11 +351,15 @@
                 let tickFormatY = '';
                 const colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
 
-                if (modalidade === 'percentual') {
+                if (modalidade === 'absoluto') {
+                    yAxisTitle = 'Valor em Reais (R$)';
+                    graphTitlePrefix = 'Valor Absoluto';
+                    tickFormatY = '$,.2f';
+                } else if (modalidade === 'percentual') {
                     yAxisTitle = 'Variação Percentual (%)';
                     graphTitlePrefix = 'Variação Percentual';
                     tickFormatY = ',.1f';
-                } else {
+                } else { // diferencaReais
                     yAxisTitle = 'Diferença em Reais (R$)';
                     graphTitlePrefix = 'Diferença em Reais';
                     tickFormatY = '$,.2f';
@@ -344,6 +378,7 @@
                     
                     const lineColor = colors[index % colors.length];
 
+                    // O valor inicial é necessário para 'percentual' e 'diferencaReais'
                     const valorInicial = Number(dadosFiltradosParaElemento[0][elemento]);
 
                     if (valorInicial === 0 && modalidade === 'percentual') {
@@ -353,13 +388,22 @@
                     
                     const x = dadosFiltradosParaElemento.map(item => item.Data);
                     let y;
-                    if (modalidade === 'percentual') {
+                    
+                    if (modalidade === 'absoluto') {
+                        // NOVO: Valor Absoluto (R$)
+                        y = dadosFiltradosParaElemento.map(item => Number(item[elemento]));
+                    } else if (modalidade === 'percentual') {
                          y = dadosFiltradosParaElemento.map(item => ((Number(item[elemento]) / valorInicial) - 1) * 100);
-                    } else {
+                    } else { // diferencaReais
                         y = dadosFiltradosParaElemento.map(item => Number(item[elemento]) - valorInicial);
                     }
                     
-                    const comentarios = dadosFiltradosParaElemento.map(item => item.Comentario);
+                    // Cria customdata para o hover (Raw Value e Comentario)
+                    const customData = dadosFiltradosParaElemento.map(item => {
+                        const valorBruto = Number(item[elemento]);
+                        const comentario = item.Comentario || '';
+                        return [valorBruto.toFixed(2), comentario]; // [RawValue, Comment]
+                    });
 
                     traces.push({
                         x: x,
@@ -367,8 +411,16 @@
                         mode: 'lines+markers',
                         type: 'scatter',
                         name: elemento,
-                        customdata: comentarios,
-                        hovertemplate: '<b>Data</b>: %{x}<br><b>Valor</b>: %{y}<br>%{customdata}<extra></extra>'
+                        // Adiciona dados customizados para usar no hover
+                        customdata: customData, 
+                        hovertemplate: 
+                            '<b>Data</b>: %{x}<br>' +
+                            // Mostra o título do eixo Y (Variação/Diferença/Valor)
+                            `<b>${yAxisTitle.replace(/\s*\([\s\S]*\)/g, '')}</b>: %{y}<br>` + 
+                            // Valor Bruto sempre é útil
+                            '<b>Valor Bruto</b>: R$ %{customdata[0]}<br>' + 
+                            // Comentário (se existir)
+                            '%{customdata[1]}<extra></extra>' 
                     });
                 });
 
@@ -390,7 +442,7 @@
                         title: yAxisTitle,
                         tickformat: tickFormatY 
                     },
-                    hovermode: 'closest',
+                    hovermode: 'x unified', // Mostra todos os pontos na mesma data
                     hoverlabel: {
                         bgcolor: '#2d3748',
                         font: {
