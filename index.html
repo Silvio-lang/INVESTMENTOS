@@ -214,7 +214,6 @@
                     const totalOption = document.createElement('option');
                     totalOption.value = 'TOTAL';
                     totalOption.textContent = 'TOTAL';
-                    // Adiciona o atributo 'selected' para já vir selecionado
                     totalOption.selected = true; 
                     elementoSelecionadoSelect.appendChild(totalOption);
                     
@@ -223,7 +222,6 @@
 
 
                     // 2. ADICIONA AS OUTRAS CHAVES NUMÉRICAS
-                    // Converte o Set para Array e ordena as chaves restantes (opcional: ordenar alfabeticamente)
                     const outrasChaves = Array.from(chavesNumericasIdentificadas).sort();
 
                     outrasChaves.forEach(key => {
@@ -319,7 +317,7 @@
                                                .filter(option => option.selected)
                                                .map(option => option.value);
 
-                // No modo 'Diferença em Reais', o IBOV não pode ser plotado.
+                // Regra: No modo 'Diferença em Reais', o IBOV não pode ser plotado.
                 if (modalidade === 'diferencaReais') {
                     elementosSelecionados = elementosSelecionados.filter(el => el !== 'IBOV');
                     if (elementosSelecionados.length === 0) {
@@ -328,7 +326,6 @@
                     }
                 }
                 
-                // No modo 'Valor Absoluto' e 'Variação Percentual', podemos plotar o IBOV
                 if (!dataInicio || !dataFim || elementosSelecionados.length === 0) {
                     showMessage('Por favor, preencha todos os campos: data de início, data final e selecione pelo menos um elemento.', 'error');
                     return;
@@ -350,6 +347,11 @@
                 let graphTitlePrefix = '';
                 let tickFormatY = '';
                 const colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+                
+                // NOVIDADES: Novo destaque de cor e tamanho
+                const highlightColor = '#FFFF00'; // Azul Celeste Profundo
+                const defaultMarkerSize = 9;
+                const highlightedMarkerSize = 12; // Aumento no tamanho do ponto
 
                 if (modalidade === 'absoluto') {
                     yAxisTitle = 'Valor em Reais (R$)';
@@ -378,7 +380,18 @@
                     
                     const lineColor = colors[index % colors.length];
 
-                    // O valor inicial é necessário para 'percentual' e 'diferencaReais'
+                    // 1. LÓGICA DE CORES DO MARCADOR
+                    const markerColors = dadosFiltradosParaElemento.map(item => {
+                        const hasComment = item.Comentario && item.Comentario.trim().length > 0;
+                        return hasComment ? highlightColor : lineColor;
+                    });
+                    
+                    // 2. LÓGICA DE TAMANHO DO MARCADOR (NOVIDADE)
+                    const markerSizes = dadosFiltradosParaElemento.map(item => {
+                        const hasComment = item.Comentario && item.Comentario.trim().length > 0;
+                        return hasComment ? highlightedMarkerSize : defaultMarkerSize;
+                    });
+
                     const valorInicial = Number(dadosFiltradosParaElemento[0][elemento]);
 
                     if (valorInicial === 0 && modalidade === 'percentual') {
@@ -390,7 +403,6 @@
                     let y;
                     
                     if (modalidade === 'absoluto') {
-                        // NOVO: Valor Absoluto (R$)
                         y = dadosFiltradosParaElemento.map(item => Number(item[elemento]));
                     } else if (modalidade === 'percentual') {
                          y = dadosFiltradosParaElemento.map(item => ((Number(item[elemento]) / valorInicial) - 1) * 100);
@@ -411,16 +423,22 @@
                         mode: 'lines+markers',
                         type: 'scatter',
                         name: elemento,
-                        // Adiciona dados customizados para usar no hover
+                        // CONFIGURAÇÃO DINÂMICA
+                        marker: {
+                            color: markerColors, // Array de cores
+                            size: markerSizes,   // Array de tamanhos dinâmico
+                            line: {
+                                color: markerColors, // Faz a borda seguir a cor do ponto
+                                width: 1
+                            }
+                        },
                         customdata: customData, 
                         hovertemplate: 
                             '<b>Data</b>: %{x}<br>' +
-                            // Mostra o título do eixo Y (Variação/Diferença/Valor)
                             `<b>${yAxisTitle.replace(/\s*\([\s\S]*\)/g, '')}</b>: %{y}<br>` + 
-                            // Valor Bruto sempre é útil
                             '<b>Valor Bruto</b>: R$ %{customdata[0]}<br>' + 
-                            // Comentário (se existir)
-                            '%{customdata[1]}<extra></extra>' 
+                            // Destaca o Comentário se houver:
+                            '<b>Comentário</b>: %{customdata[1]}<extra></extra>' 
                     });
                 });
 
@@ -442,11 +460,11 @@
                         title: yAxisTitle,
                         tickformat: tickFormatY 
                     },
-                    hovermode: 'x unified', // Mostra todos os pontos na mesma data
+                    hovermode: 'x unified', 
                     hoverlabel: {
                         bgcolor: '#2d3748',
                         font: {
-                            color: '#FFD700' 
+                            color: '#00BFFF' // Cor do texto do hover label para harmonizar com o destaque
                         }
                     },
                     legend: {
