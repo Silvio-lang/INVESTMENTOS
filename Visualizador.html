@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizador de Dados Financeiros</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js" charset="utf-8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .btn-primary { @apply bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-all duration-300 ease-in-out; }
+        .btn-primary:hover { @apply bg-blue-700 scale-105; }
+        .btn-secundary { @apply bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg shadow-md transition-all duration-300 ease-in-out; }
+        .btn-secundary:hover { @apply bg-gray-300 scale-105; }
+        .btn-success { @apply bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md; }
+        .btn-success:hover { @apply bg-green-700 scale-105; }
+        .btn-download { @apply bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md; }
+        .btn-download:hover { @apply bg-purple-700 scale-105; }
+        .message-box { animation: fadeInOut 3s forwards; transform-origin: center center; }
+        .message-box.success { @apply bg-green-500 text-white; }
+        .message-box.error { @apply bg-red-500 text-white; }
+        @keyframes fadeInOut {
+            0% { transform: scale(0.5); opacity: 0; } 10% { transform: scale(1); opacity: 1; }
+            90% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.5); opacity: 0; }
+        }
+        #areaGrafico {
+            width: 100%;
+            height: 100%;
+            min-height: 400px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans flex flex-col min-h-screen">
+
+    <div id="message-box" class="fixed top-4 left-1/2 -translate-x-1/2 p-4 rounded-lg text-sm z-50 opacity-0" style="display: none;"></div>
+
+    <header class="bg-white shadow-md p-4 flex justify-between items-center">
+        <h1 class="text-2xl font-bold text-gray-800 text-center flex-grow">Visualizador de Dados Financeiros</h1>
+        <div id="user-session" class="hidden flex items-center gap-4">
+            <span id="user-email" class="text-sm text-gray-600"></span>
+            <button id="logoutBtn" class="btn-secundary">Sair</button>
+        </div>
+    </header>
+    
+    <div id="auth-section" class="flex-grow flex items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-sm">
+            <h2 class="text-2xl font-bold mb-6 text-center text-gray-700">Acessar Conta</h2>
+            <div class="flex flex-col gap-4">
+                <input type="email" id="emailInput" placeholder="Seu e-mail" class="w-full p-2 border border-gray-300 rounded-lg">
+                <input type="password" id="passwordInput" placeholder="Sua senha" class="w-full p-2 border border-gray-300 rounded-lg">
+                <button id="loginBtn" class="btn-primary">Entrar / Cadastrar</button>
+            </div>
+        </div>
+    </div>
+
+    <main id="main-content" class="flex flex-col lg:flex-row flex-grow p-4 gap-4 hidden">
+        <div class="bg-white p-4 rounded-lg shadow-md lg:w-1/3 flex flex-col gap-4">
+            <h2 class="text-xl font-semibold mb-2 text-gray-700">Controles</h2>
+            
+            <div>
+                <label for="arquivoInput" class="block text-gray-600 font-medium mb-1">Carregar Arquivo JSON:</label>
+                <input type="file" id="arquivoInput" accept=".json" class="w-full text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
+                <p id="fileStatusMessage" class="mt-2 text-sm text-gray-400">Nenhum arquivo escolhido.</p>
+            </div>
+            
+            <div>
+                <label for="elementoSelecionado" class="block text-gray-600 font-medium mb-1">Selecionar Elemento:</label>
+                <select multiple id="elementoSelecionado" class="w-full p-2 border border-gray-300 rounded-lg h-24 text-sm text-gray-800 bg-white"></select>
+            </div>
+
+            <div>
+                <label class="block text-gray-600 font-medium mb-1">Período:</label>
+                <div class="flex gap-2">
+                    <input type="date" id="dataInicio" class="w-1/2 p-2 border border-gray-300 rounded-lg text-sm text-gray-800">
+                    <input type="date" id="dataFim" class="w-1/2 p-2 border border-gray-300 rounded-lg text-sm text-gray-800">
+                </div>
+            </div>
+
+            <div>
+                <label for="modalidadeGrafico" class="block text-gray-600 font-medium mb-1">Modalidade do Gráfico:</label>
+                <select id="modalidadeGrafico" class="w-full p-2 border border-gray-300 rounded-lg text-sm text-gray-800 bg-white">
+                    <option value="absoluto">Valor Absoluto (R$)</option>
+                    <option value="percentual">Variação Percentual (%)</option>
+                    <option value="diferencaReais">Diferença em Reais (R$)</option>
+                </select>
+            </div>
+            
+            <div class="flex flex-col sm:flex-row gap-2">
+                <button id="gerarGraficoBtn" class="w-full btn-primary">Gerar Gráfico</button>
+                <button id="downloadBtn" class="w-full btn-download">Baixar da Nuvem</button>
+                <button id="sincronizarBtn" class="w-full btn-success">Salvar na Nuvem</button>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-lg shadow-md flex-grow lg:w-2/3 flex items-center justify-center">
+            <div id="areaGrafico">
+                <p class="text-gray-400 text-center">Faça login para carregar os dados.</p>
+            </div>
+        </div>
+    </main>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const messageBox = document.getElementById('message-box'), authSection = document.getElementById('auth-section'),
+            emailInput = document.getElementById('emailInput'), passwordInput = document.getElementById('passwordInput'),
+            loginBtn = document.getElementById('loginBtn'), userSession = document.getElementById('user-session'),
+            userEmailSpan = document.getElementById('user-email'), logoutBtn = document.getElementById('logoutBtn'),
+            mainContent = document.getElementById('main-content'), arquivoInput = document.getElementById('arquivoInput'),
+            fileStatusMessage = document.getElementById('fileStatusMessage'), elementoSelecionadoSelect = document.getElementById('elementoSelecionado'),
+            dataInicioInput = document.getElementById('dataInicio'), dataFimInput = document.getElementById('dataFim'),
+            modalidadeGraficoSelect = document.getElementById('modalidadeGrafico'),
+            gerarGraficoBtn = document.getElementById('gerarGraficoBtn'), sincronizarBtn = document.getElementById('sincronizarBtn'),
+            downloadBtn = document.getElementById('downloadBtn'), areaGrafico = document.getElementById('areaGrafico');
+
+            const SUPABASE_URL = 'https://keaimlhudjtijdujovdu.supabase.co'; 
+            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtlYWltbGh1ZGp0aWpkdWpvdmR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5NTk5NTQsImV4cCI6MjA3NjUzNTk1NH0.xv_GSrMSAW555j-h6UmFOaoq7sIa47OxLZ4LXPMUErs'; 
+            const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+            let dadosFinanceiros = [], currentLayout = {}, currentTraces = [];
+            
+            function showMessage(message, type = 'success') {
+                messageBox.textContent = message;
+                messageBox.className = `message-box fixed top-4 left-1/2 -translate-x-1/2 p-4 rounded-lg text-sm z-50 ${type}`;
+                messageBox.style.display = 'block';
+                setTimeout(() => { messageBox.style.display = 'none'; }, 3000);
+            }
+            
+            const converterDataJSON = (d) => (d?.includes('/') ? d.split('/').reverse().join('-') : d);
+            
+            const formatarDataParaExibicao = (d) => (d?.includes('-') ? d.split('-').reverse().join('/') : d);
+
+            function setDefaultDates() {
+                const today = new Date();
+                const oneMonthAgo = new Date(new Date().setMonth(today.getMonth() - 1));
+                dataFimInput.value = today.toISOString().split('T')[0];
+                dataInicioInput.value = oneMonthAgo.toISOString().split('T')[0];
+            };
+            
+            // ATENÇÃO: Se o erro 'column does not exist' persistir, o nome da coluna aqui deve corresponder ao do seu banco de dados.
+            const mapearParaApp = (dbData) => dbData.map(i => ({ Data: formatarDataParaExibicao(i.data_registro), XP: i.xp, 'Rico-Modal-Clear': i.rico_modal_clear, Outras: i.outras, OutrasDesc: i.outras_desc, Comentario: i.comentario, IBOV: i.ibov, 'Renda Fixa': i.renda_fixa }));
+            const mapearParaBanco = (appData) => appData.map(i => ({ data_registro: converterDataJSON(i.Data), xp: i.XP, rico_modal_clear: i['Rico-Modal-Clear'], outras: i.Outras, outras_desc: i.OutrasDesc, comentario: i.Comentario, ibov: i.IBOV, renda_fixa: i['Renda Fixa'] }));
+
+            function processarDados(dados, origem) {
+                dadosFinanceiros = dados;
+                if (!dados || dados.length === 0) {
+                    areaGrafico.innerHTML = '<p class="text-gray-400">Nenhum dado para exibir.</p>';
+                    elementoSelecionadoSelect.innerHTML = '<option disabled>Sem dados</option>';
+                    fileStatusMessage.textContent = origem ? `Arquivo "${origem}" está vazio ou inválido.` : "Nenhum dado na nuvem.";
+                    return;
+                }
+                fileStatusMessage.textContent = `Dados de "${origem}" carregados (${dados.length} registros).`;
+                dadosFinanceiros.sort((a, b) => new Date(converterDataJSON(a.Data)) - new Date(converterDataJSON(b.Data)));
+                dados.forEach(i => { const xp = Number(i.XP) || 0, rf = Number(i['Renda Fixa']) || 0, rc = Number(i['Rico-Modal-Clear']) || 0, o = Number(i.Outras) || 0; i['Renda Variável'] = xp - rf; i.TOTAL = xp + rc + o; });
+                const chaves = new Set(['TOTAL']);
+                dados.forEach(i => Object.keys(i).forEach(k => { if (typeof i[k] === 'number' && !isNaN(i[k]) && k !== 'Data' && k !== 'Comentario' && k !== 'OutrasDesc') { chaves.add(k); }}));
+                elementoSelecionadoSelect.innerHTML = ''; const totalOption = document.createElement('option'); totalOption.value = 'TOTAL'; totalOption.textContent = 'TOTAL'; totalOption.selected = true; elementoSelecionadoSelect.appendChild(totalOption); chaves.delete('TOTAL');
+                [...chaves].sort().forEach(k => { const option = document.createElement('option'); option.value = k; option.textContent = k; elementoSelecionadoSelect.appendChild(option); });
+                generateOrUpdateGraph();
+            }
+
+            async function carregarDaNuvem() {
+                areaGrafico.innerHTML = '<p class="text-gray-400">Carregando...</p>';
+                const { data, error } = await supabaseClient.from('INVEST_MENTOS').select('*').order('data_registro', { ascending: true });
+                if (error) {
+                    showMessage(`Erro ao carregar: ${error.message}`, 'error');
+                    console.error('Erro Supabase:', error);
+                    return;
+                }
+                processarDados(mapearParaApp(data), "Nuvem");
+            }
+
+            function downloadDaNuvem() {
+                if (dadosFinanceiros.length === 0) return showMessage("Não há dados para baixar.", "error");
+                const jsonString = JSON.stringify(dadosFinanceiros, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = 'investimentos_nuvem.json';
+                document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                showMessage('Arquivo JSON baixado com sucesso!', 'success');
+            }
+            
+            async function sincronizarParaNuvem() {
+                if (dadosFinanceiros.length === 0) return showMessage("Carregue um arquivo JSON primeiro.", "error");
+                if (!confirm("Isso irá SUBSTITUIR todos os dados na nuvem. Deseja continuar?")) return;
+                showMessage("Sincronizando...", "success");
+                const { data: { user } } = await supabaseClient.auth.getUser();
+                if (!user) return showMessage("Sessão expirada. Faça login novamente.", "error");
+                const { error: delErr } = await supabaseClient.from('INVEST_MENTOS').delete().eq('user_id', user.id);
+                if (delErr) return showMessage(`Erro ao limpar nuvem: ${delErr.message}`, 'error');
+                const { error: insErr } = await supabaseClient.from('INVEST_MENTOS').insert(mapearParaBanco(dadosFinanceiros));
+                if (insErr) return showMessage(`Erro ao salvar na nuvem: ${insErr.message}`, 'error');
+                showMessage('Dados sincronizados com a nuvem!', 'success');
+            }
+
+            supabaseClient.auth.onAuthStateChange((event, session) => {
+                const user = session?.user;
+                authSection.style.display = user ? 'none' : 'flex';
+                mainContent.style.display = user ? 'flex' : 'none';
+                userSession.classList.toggle('hidden', !user);
+                if (user) { userEmailSpan.textContent = user.email; carregarDaNuvem(); } 
+                else { dadosFinanceiros = []; areaGrafico.innerHTML = '<p class="text-gray-400">Faça login.</p>'; }
+            });
+
+            const handleLogin = async () => {
+                const { error } = await supabaseClient.auth.signInWithPassword({ email: emailInput.value, password: passwordInput.value });
+                if (error) {
+                    if (error.message.includes("Invalid login")) {
+                        const { error: signUpError } = await supabaseClient.auth.signUp({ email: emailInput.value, password: passwordInput.value });
+                        if (signUpError) return showMessage(`Erro no cadastro: ${signUpError.message}`, 'error');
+                        showMessage('Conta criada! Se a confirmação de e-mail estiver ativa, verifique sua caixa de entrada.', 'success');
+                    } else showMessage(`Erro: ${error.message}`, 'error');
+                }
+            };
+            
+            function generateOrUpdateGraph() {
+                if (dadosFinanceiros.length === 0) return;
+                const dataInicio = dataInicioInput.value, dataFim = dataFimInput.value, modalidade = modalidadeGraficoSelect.value;
+                let elementosSelecionados = Array.from(elementoSelecionadoSelect.options).filter(o => o.selected).map(o => o.value);
+                if (modalidade === 'diferencaReais') { elementosSelecionados = elementosSelecionados.filter(el => el !== 'IBOV'); if (elementosSelecionados.length === 0) { return showMessage('Para "Diferença em Reais", selecione um ativo (exceto IBOV).', 'error'); } }
+                if (!dataInicio || !dataFim || elementosSelecionados.length === 0) { return showMessage('Preencha período e selecione um elemento.', 'error'); }
+                let dadosPorData = dadosFinanceiros.filter(i => { const d = converterDataJSON(i.Data); return d >= dataInicio && d <= dataFim; });
+                if (dadosPorData.length === 0) { areaGrafico.innerHTML = '<p class="text-gray-400">Nenhum dado no período.</p>'; return; }
+                const traces = [], colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+                let yTitle = '', gTitle = '', tickY = '';
+                const highlightColor = '#FFFF00', defaultMarkerSize = 9, highlightedMarkerSize = 12;
+                if (modalidade === 'absoluto') { yTitle = 'Valor (R$)', gTitle = 'Valor Absoluto', tickY = '$,.2f'; }
+                else if (modalidade === 'percentual') { yTitle = 'Variação (%)', gTitle = 'Variação Percentual', tickY = ',.1f'; }
+                else { yTitle = 'Diferença (R$)', gTitle = 'Diferença em Reais', tickY = '$,.2f'; }
+                elementosSelecionados.forEach((el, i) => {
+                    const dadosEl = dadosPorData.filter(item => { const v = Number(item[el]); return !isNaN(v) && v !== 0; });
+                    if (dadosEl.length === 0) return;
+                    const vInicial = Number(dadosEl[0][el]);
+                    if (vInicial === 0 && modalidade === 'percentual') return;
+                    const markerColors = dadosEl.map(item => (item.Comentario && item.Comentario.trim().length > 0) ? highlightColor : colors[i % colors.length]);
+                    const markerSizes = dadosEl.map(item => (item.Comentario && item.Comentario.trim().length > 0) ? highlightedMarkerSize : defaultMarkerSize);
+                    let y;
+                    if (modalidade === 'absoluto') y = dadosEl.map(item => Number(item[el]));
+                    else if (modalidade === 'percentual') y = dadosEl.map(item => ((Number(item[el]) / vInicial) - 1) * 100);
+                    else y = dadosEl.map(item => Number(item[el]) - vInicial);
+                    traces.push({ x: dadosEl.map(item => item.Data), y, name: el, mode: 'lines+markers', type: 'scatter', customdata: dadosEl.map(item => [Number(item[el]).toFixed(2), item.Comentario || '']), marker: { color: markerColors, size: markerSizes, line: { color: markerColors, width: 1 } }, hovertemplate: `<b>Data</b>: %{x}<br><b>${yTitle.replace(/\s*\(.*\)/,'')}:</b> %{y:,.2f}<br><b>Valor Bruto</b>: R$ %{customdata[0]}<br><b>Comentário</b>: %{customdata[1]}<extra></extra>` });
+                });
+                if (traces.length === 0) { areaGrafico.innerHTML = '<p class="text-gray-400">Nenhum dado válido para os elementos no período.</p>'; return; }
+                const layout = { title: `${gTitle} de ${elementosSelecionados.join(', ')} de ${formatarDataParaExibicao(dataInicio)} a ${formatarDataParaExibicao(dataFim)}`, xaxis: { title: 'Data', tickangle: -45 }, yaxis: { title: yTitle, tickformat: tickY }, hovermode: 'x unified', hoverlabel: { bgcolor: '#2d3748', font: { color: '#00BFFF' } }, legend: { orientation: 'h', y: 1.15, yanchor: 'bottom', x: 1, xanchor: 'right' }, autosize: true };
+                Plotly.newPlot(areaGrafico, layout, {responsive: true});
+                Plotly.react(areaGrafico, traces, layout);
+            }
+
+            // --- LISTENERS ---
+            arquivoInput.addEventListener('change', (e) => {
+                const f = e.target.files[0]; if (!f) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => { try { processarDados(JSON.parse(ev.target.result), f.name); } catch { showMessage('Arquivo JSON inválido.', 'error'); } };
+                reader.readAsText(f);
+            });
+            loginBtn.addEventListener('click', handleLogin);
+            logoutBtn.addEventListener('click', () => supabaseClient.auth.signOut());
+            downloadBtn.addEventListener('click', downloadDaNuvem);
+            sincronizarBtn.addEventListener('click', sincronizarParaNuvem);
+            gerarGraficoBtn.addEventListener('click', generateOrUpdateGraph);
+            window.addEventListener('resize', () => { if(dadosFinanceiros.length > 0) Plotly.Plots.resize(areaGrafico); });
+            setDefaultDates();
+        });
+    </script>
+</body>
+</html>Visualiza
